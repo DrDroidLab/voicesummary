@@ -85,7 +85,17 @@ class S3Manager:
                 return s3_url.replace(f's3://{self.bucket_name}/', '', 1)
             elif 'amazonaws.com' in s3_url:
                 # https://bucket.s3.region.amazonaws.com/key format
-                return s3_url.split(f'{self.bucket_name}.s3.')[0].split('/')[-1]
+                # Extract everything after the domain
+                domain_part = f"{self.bucket_name}.s3.{settings.aws_region}.amazonaws.com"
+                if domain_part in s3_url:
+                    key_part = s3_url.split(domain_part)[1]
+                    # Remove leading slash and return the key
+                    return key_part.lstrip('/')
+                else:
+                    # Fallback: try to extract from any amazonaws.com URL
+                    parts = s3_url.split('amazonaws.com/')
+                    if len(parts) > 1:
+                        return parts[1]
             else:
                 # Assume it's already a key
                 return s3_url

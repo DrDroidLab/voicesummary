@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AudioCallCreate(BaseModel):
@@ -18,11 +18,18 @@ class AudioCallResponse(BaseModel):
     """Schema for audio call response."""
     
     call_id: str
-    timestamp: datetime
+    timestamp: int  # Epoch timestamp in seconds
     transcript: Dict[str, Any]
     audio_file_url: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: int  # Epoch timestamp in seconds
+    updated_at: int  # Epoch timestamp in seconds
+    
+    @field_validator('timestamp', 'created_at', 'updated_at', mode='before')
+    @classmethod
+    def convert_datetime_to_epoch(cls, v):
+        if isinstance(v, datetime):
+            return int(v.timestamp())
+        return v
     
     class Config:
         from_attributes = True

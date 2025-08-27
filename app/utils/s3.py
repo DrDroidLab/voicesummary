@@ -4,6 +4,11 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 from typing import Optional, BinaryIO
 import logging
+import requests
+import tempfile
+import os
+from urllib.parse import urlparse
+from datetime import datetime
 
 from app.config import settings
 
@@ -22,6 +27,137 @@ class S3Manager:
             region_name=settings.aws_region
         )
         self.bucket_name = settings.s3_bucket_name
+    
+    def download_and_upload_audio(self, audio_url: str, call_id: str, file_extension: str = "mp3") -> Optional[str]:
+        """
+        Download audio file from external URL and upload to S3.
+        
+        Args:
+            audio_url: URL of the audio file to download
+            call_id: Unique identifier for the call (used in S3 key)
+            file_extension: File extension for the audio file (default: mp3)
+            
+        Returns:
+            S3 URL of the uploaded file, or None if operation fails
+        """
+        try:
+            logger.info(f"Downloading audio from {audio_url} for call {call_id}")
+            
+            # Download the audio file
+            response = requests.get(audio_url, stream=True, timeout=30)
+            response.raise_for_status()
+            
+            # Create a temporary file to store the downloaded audio
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_extension}") as temp_file:
+                # Write the downloaded content to the temporary file
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        temp_file.write(chunk)
+                
+                temp_file_path = temp_file.name
+            
+            try:
+                # Now detect the actual format from file headers (more reliable)
+                detected_extension = self._detect_audio_format_from_headers(temp_file_path)
+                if detected_extension != file_extension:
+                    logger.info(f"Format detection corrected extension from '{file_extension}' to '{detected_extension}'")
+                    
+                    # Rename the temp file to have the correct extension
+                    old_extension = file_extension.split('.')[-1] if '.' in file_extension else file_extension
+                    new_temp_file_path = temp_file_path.replace(f".{old_extension}", f".{detected_extension}")
+                    os.rename(temp_file_path, new_temp_file_path)
+                    temp_file_path = new_temp_file_path
+                    file_extension = detected_extension
+                    logger.info(f"Renamed temp file to: {temp_file_path}")
+                
+                # Generate S3 key with proper extension
+                s3_key = f"calls/{call_id}/audio.{file_extension}"
+                content_type = self._get_content_type(file_extension)
+                
+                logger.info(f"Uploading to S3 with key: {s3_key}, content type: {content_type}")
+                
+                # Upload to S3
+                with open(temp_file_path, 'rb') as file_obj:
+                    self.s3_client.upload_fileobj(
+                        file_obj,
+                        self.bucket_name,
+                        s3_key,
+                        ExtraArgs={
+                            'ContentType': content_type,
+                            'Metadata': {
+                                'call_id': call_id,
+                                'source_url': audio_url,
+                                'uploaded_at': str(datetime.now()),
+                                'detected_format': file_extension
+                            }
+                        }
+                    )
+                
+                # Generate S3 URL
+                s3_url = f"https://{self.bucket_name}.s3.amazonaws.com/{s3_key}"
+                logger.info(f"Successfully uploaded audio for call {call_id} to S3: {s3_url}")
+                
+                return s3_url
+                
+            finally:
+                # Clean up temporary file
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+                    
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to download audio from {audio_url}: {e}")
+            return None
+        except ClientError as e:
+            logger.error(f"Failed to upload audio to S3 for call {call_id}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error processing audio for call {call_id}: {e}")
+            return None
+    
+    def _get_content_type(self, file_extension: str) -> str:
+        """Get the appropriate content type for a file extension."""
+        content_types = {
+            'mp3': 'audio/mpeg',
+            'wav': 'audio/wav',
+            'm4a': 'audio/mp4',
+            'aac': 'audio/aac',
+            'ogg': 'audio/ogg',
+            'flac': 'audio/flac'
+        }
+        return content_types.get(file_extension.lower(), 'audio/mpeg')
+    
+    def _detect_audio_format_from_headers(self, file_path: str) -> str:
+        """Detect audio format by examining file headers."""
+        try:
+            with open(file_path, 'rb') as f:
+                # Read first 16 bytes to examine file headers
+                header = f.read(16)
+                
+                # Check for common audio file signatures
+                if header.startswith(b'ID3') or header.startswith(b'\xff\xfb') or header.startswith(b'\xff\xf3'):
+                    return 'mp3'
+                elif header.startswith(b'RIFF') and header[8:12] == b'WAVE':
+                    return 'wav'
+                elif header.startswith(b'ftyp'):
+                    # Check for MP4/AAC variants
+                    ftype = header[4:8]
+                    if ftype in [b'M4A ', b'M4B ', b'M4P ', b'M4V ']:
+                        return 'm4a'
+                    elif ftype == b'MP4 ':
+                        return 'mp4'
+                elif header.startswith(b'\xff\xf1') or header.startswith(b'\xff\xf9'):
+                    return 'aac'
+                elif header.startswith(b'OggS'):
+                    return 'ogg'
+                elif header.startswith(b'fLaC'):
+                    return 'flac'
+                
+                logger.warning(f"Could not detect audio format from headers for {file_path}")
+                return 'mp3'  # Default fallback
+                
+        except Exception as e:
+            logger.error(f"Error detecting audio format from headers: {e}")
+            return 'mp3'  # Default fallback
     
     def download_audio_file(self, s3_key: str) -> Optional[BinaryIO]:
         """
@@ -85,17 +221,7 @@ class S3Manager:
                 return s3_url.replace(f's3://{self.bucket_name}/', '', 1)
             elif 'amazonaws.com' in s3_url:
                 # https://bucket.s3.region.amazonaws.com/key format
-                # Extract everything after the domain
-                domain_part = f"{self.bucket_name}.s3.{settings.aws_region}.amazonaws.com"
-                if domain_part in s3_url:
-                    key_part = s3_url.split(domain_part)[1]
-                    # Remove leading slash and return the key
-                    return key_part.lstrip('/')
-                else:
-                    # Fallback: try to extract from any amazonaws.com URL
-                    parts = s3_url.split('amazonaws.com/')
-                    if len(parts) > 1:
-                        return parts[1]
+                return s3_url.split('amazonaws.com/')[-1]
             else:
                 # Assume it's already a key
                 return s3_url

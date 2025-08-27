@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     s3_bucket_name: str
     
+    # Bolna API Configuration
+    bolna_api_key: Optional[str] = None
+    
     # Application
     app_host: str = "0.0.0.0"
     app_port: int = 8000

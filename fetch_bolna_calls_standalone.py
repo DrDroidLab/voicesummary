@@ -28,6 +28,8 @@ import logging
 import tempfile
 import mimetypes
 from dotenv import load_dotenv
+import json
+import numpy as np
 
 # Load environment variables from .env file
 load_dotenv()
@@ -61,6 +63,7 @@ class AudioCall(Base):
     timestamp = Column(DateTime(timezone=True), nullable=False)
     transcript = Column(JSON, nullable=False)
     audio_file_url = Column(Text, nullable=False)
+    processed_data = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)
     
@@ -355,10 +358,10 @@ class S3Manager:
                 return 'flac'
             else:
                 # Try mimetypes module as fallback
-            ext = mimetypes.guess_extension(content_type)
-            if ext:
+                ext = mimetypes.guess_extension(content_type)
+                if ext:
                     logger.info(f"Found extension '{ext}' from mimetypes for content type '{content_type}'")
-                return ext.lstrip('.')
+                    return ext.lstrip('.')
         
         # Try to get extension from URL
         if '.' in url:
@@ -635,6 +638,213 @@ class S3Manager:
             logger.error(f"Error listing recordings: {e}")
             return []
 
+    def analyze_audio_and_enhance_transcript(self, audio_file_path: str, transcript_data: Dict[str, Any], call_timestamp: datetime) -> Dict[str, Any]:
+        """Analyze audio file and enhance transcript with accurate timestamps."""
+        try:
+            logger.info(f"Analyzing audio file: {audio_file_path}")
+            
+            # Import process module for audio analysis
+            from process import analyze_audio
+            
+            # Analyze the audio file
+            analysis_results = analyze_audio(audio_file_path)
+            logger.info(f"Audio analysis completed for {audio_file_path}")
+            
+            # Convert numpy types to native Python types for JSON serialization
+            def convert_numpy_types(obj):
+                if isinstance(obj, np.integer):
+                    return int(obj)
+                elif isinstance(obj, np.floating):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, dict):
+                    return {key: convert_numpy_types(value) for key, value in obj.items()}
+                elif isinstance(obj, list):
+                    return [convert_numpy_types(item) for item in obj]
+                else:
+                    return obj
+            
+            # Convert analysis results to JSON-serializable format
+            json_safe_results = convert_numpy_types(analysis_results)
+            
+            # Enhance transcript with accurate timestamps using speech segments and pauses
+            enhanced_transcript = self._enhance_transcript_with_timestamps(
+                transcript_data, 
+                json_safe_results, 
+                call_timestamp
+            )
+            
+            # Store enhanced transcript in the results
+            json_safe_results['enhanced_transcript'] = enhanced_transcript
+            
+            return json_safe_results
+            
+        except Exception as e:
+            logger.error(f"Error analyzing audio file {audio_file_path}: {e}")
+            # Return basic transcript enhancement without audio analysis
+            return self._enhance_transcript_with_timestamps(
+                transcript_data, 
+                {}, 
+                call_timestamp
+            )
+
+    def _enhance_transcript_with_timestamps(self, transcript_data: Dict[str, Any], analysis_results: Dict[str, Any], call_timestamp: datetime) -> Dict[str, Any]:
+        """Enhance transcript with accurate timestamps using audio analysis data."""
+        try:
+            if not isinstance(transcript_data, dict) or 'turns' not in transcript_data:
+                logger.warning("Invalid transcript data for enhancement")
+                return transcript_data
+            
+            turns = transcript_data['turns']
+            if not turns:
+                return transcript_data
+            
+            # Get speech segments and pauses from analysis
+            speech_segments = analysis_results.get('speech_segments', [])
+            pauses = analysis_results.get('pauses', [])
+            
+            # Create a timeline of all events (speech + pauses)
+            # This will be populated from the full_timeline we create below
+            timeline_events = []
+            
+            # Create transcript turns directly from speech segments and transcript text
+            enhanced_turns = []
+            
+            # Create a comprehensive timeline with all events
+            full_timeline = []
+            
+            # Add speech segments to timeline
+            for segment in speech_segments:
+                full_timeline.append({
+                    'type': 'speech',
+                    'start': segment.get('start', 0),
+                    'end': segment.get('end', 0),
+                    'duration': segment.get('duration', 0),
+                    'segment_index': len(full_timeline)
+                })
+            
+            # Add pauses to timeline
+            for pause in pauses:
+                full_timeline.append({
+                    'type': 'pause',
+                    'start': pause.get('start_time', 0),
+                    'end': pause.get('end_time', 0),
+                    'duration': pause.get('duration', 0),
+                    'pause_type': pause.get('type', 'unknown'),
+                    'segment_index': len(full_timeline)
+                })
+            
+            # Sort timeline by start time
+            full_timeline.sort(key=lambda x: x['start'])
+            
+            # Create turns from speech segments and transcript text
+            speech_segments_in_timeline = [event for event in full_timeline if event['type'] == 'speech']
+            
+            if len(speech_segments_in_timeline) > 0:
+                logger.info(f"Creating {len(speech_segments_in_timeline)} turns from {len(turns)} transcript entries and {len(speech_segments_in_timeline)} speech segments")
+                
+                # Create turns for each speech segment
+                for i, speech_segment in enumerate(speech_segments_in_timeline):
+                    # Find corresponding transcript content
+                    if i < len(turns):
+                        # Use existing transcript content
+                        turn_content = turns[i]['content']
+                        turn_role = turns[i]['role']
+                        original_timestamp = turns[i].get('timestamp', '')
+                    else:
+                        # Create placeholder content for additional speech segments
+                        turn_content = f"Speech segment {i+1} (no transcript content)"
+                        turn_role = 'UNKNOWN'
+                        original_timestamp = ''
+                    
+                    # Create enhanced turn with accurate timing from speech segment
+                    enhanced_turn = {
+                        'role': turn_role,
+                        'content': turn_content,
+                        'start_time': speech_segment['start'],
+                        'end_time': speech_segment['end'],
+                        'duration': speech_segment['duration'],
+                        'timeline_position': speech_segment['segment_index'],
+                        'original_timestamp': original_timestamp,
+                        'speech_segment_index': i
+                    }
+                    
+                    enhanced_turns.append(enhanced_turn)
+                
+                # If we have more transcript turns than speech segments, add them with estimated timing
+                if len(turns) > len(speech_segments_in_timeline):
+                    logger.info(f"Adding {len(turns) - len(speech_segments_in_timeline)} additional turns with estimated timing")
+                    
+                    for i in range(len(speech_segments_in_timeline), len(turns)):
+                        turn = turns[i]
+                        
+                        # Estimate timing after the last speech segment
+                        if speech_segments_in_timeline:
+                            last_segment = speech_segments_in_timeline[-1]
+                            estimated_start = last_segment['end'] + (i - len(speech_segments_in_timeline) + 1) * 0.5
+                        else:
+                            estimated_start = i * 1.0
+                        
+                        enhanced_turn = {
+                            'role': turn['role'],
+                            'content': turn['content'],
+                            'start_time': estimated_start,
+                            'end_time': estimated_start + 0.5,
+                            'duration': 0.5,
+                            'timeline_position': -1,  # Indicates estimated timing
+                            'original_timestamp': turn.get('timestamp', ''),
+                            'speech_segment_index': -1,  # Indicates no speech segment
+                            'timing_method': 'estimated'
+                        }
+                        
+                        enhanced_turns.append(enhanced_turn)
+            else:
+                logger.warning("No speech segments found, creating turns with estimated timing")
+                
+                # Fallback: create turns with estimated timing
+                for i, turn in enumerate(turns):
+                    estimated_start = i * 2.0  # Assume 2 seconds per turn
+                    
+                    enhanced_turn = {
+                        'role': turn['role'],
+                        'content': turn['content'],
+                        'start_time': estimated_start,
+                        'end_time': estimated_start + 1.0,
+                        'duration': 1.0,
+                        'timeline_position': -1,
+                        'original_timestamp': turn.get('timestamp', ''),
+                        'speech_segment_index': -1,
+                        'timing_method': 'estimated_fallback'
+                    }
+                    
+                    enhanced_turns.append(enhanced_turn)
+            
+            # Create enhanced transcript
+            enhanced_transcript = {
+                'turns': enhanced_turns,
+                'timeline_events': full_timeline,
+                'audio_analysis': {
+                    'speech_segments': speech_segments,
+                    'pauses': pauses,
+                    'total_duration': analysis_results.get('audio_info', {}).get('duration', 0),
+                    'speech_percentage': analysis_results.get('audio_info', {}).get('speech_percentage', 0)
+                },
+                'metadata': {
+                    'enhancement_method': 'audio_analysis',
+                    'original_turns_count': len(turns),
+                    'enhanced_turns_count': len(enhanced_turns),
+                    'timeline_events_count': len(full_timeline)
+                }
+            }
+            
+            logger.info(f"Enhanced transcript created with {len(enhanced_turns)} turns and {len(timeline_events)} timeline events")
+            return enhanced_transcript
+            
+        except Exception as e:
+            logger.error(f"Error enhancing transcript: {e}")
+            return transcript_data
+
 
 class DatabaseManager:
     """Manager for database operations."""
@@ -676,6 +886,7 @@ class DatabaseManager:
                 call_id=call_data['call_id'],
                 transcript=call_data['transcript'],
                 audio_file_url=call_data['audio_file_url'],
+                processed_data=call_data.get('processed_data'),
                 timestamp=timestamp,
                 created_at=now,
                 updated_at=now
@@ -832,10 +1043,10 @@ def main():
             
             # Get audio URL
             if not call.get('telephony_data'):
-                logger.warning(f"No telephoney data for call {call_id}, skipping.")
-                    continue
+                logger.warning(f"No telephony data for call {call_id}, skipping.")
+                continue
                 
-                audio_url = call.get('telephony_data', {}).get('recording_url')
+            audio_url = call.get('telephony_data', {}).get('recording_url')
             if not audio_url:
                 logger.warning(f"Could not get audio URL for call {call_id}, skipping.")
                 continue
@@ -847,16 +1058,33 @@ def main():
             if s3_url:
                 logger.info(f"Successfully processed audio for call {call_id}")
                 
+                # Get the local audio file path for analysis
+                temp_path = os.path.join(os.getcwd(), 'recordings', f"{call_id}.wav")
+                detected_format = s3_manager._detect_audio_format_from_headers(temp_path)
+                local_audio_path = os.path.join(os.getcwd(), 'recordings', f"{call_id}.{detected_format}")
+                
+                # Analyze audio and enhance transcript
+                logger.info(f"Analyzing audio and enhancing transcript for call {call_id}...")
+                analysis_results = s3_manager.analyze_audio_and_enhance_transcript(
+                    local_audio_path, 
+                    normalized_transcript, 
+                    call_timestamp
+                )
+                
+                # Store analysis results in processed_data
+                processed_data = analysis_results
+                
                 # Create call record in database
                 call_data = {
                     'call_id': call_id,
-                    'transcript': normalized_transcript,
+                    'transcript': analysis_results.get('enhanced_transcript', normalized_transcript),
                     'audio_file_url': s3_url,
+                    'processed_data': processed_data,
                     'timestamp': call_timestamp
                 }
                 
                 if db_manager.create_call(call_data):
-                    logger.info(f"Successfully created call record for {call_id}")
+                    logger.info(f"Successfully created call record for {call_id} with audio analysis")
                 else:
                     logger.error(f"Failed to create call record for {call_id}")
             else:
@@ -988,4 +1216,4 @@ if __name__ == "__main__":
             logger.error(f"Unknown test option: {sys.argv[1]}")
             logger.info("Available test options: --test, --test-transcript")
     else:
-    main()
+        main()

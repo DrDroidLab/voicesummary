@@ -636,6 +636,8 @@ class ImprovedVoiceAnalyzer:
         print("IMPROVED AUDIO ANALYSIS SUMMARY")
         print("="*50)
         
+        print('results', results)
+        
         audio_info = results['audio_info']
         print(f"File: {audio_info['file']}")
         print(f"Duration: {audio_info['duration']:.2f}s")

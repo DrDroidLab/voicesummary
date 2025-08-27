@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+  }
+  
+  .card {
+    @apply bg-white rounded-lg shadow-md border border-gray-200 p-6;
+  }
+}

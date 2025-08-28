@@ -15,6 +15,17 @@ A comprehensive platform for analyzing, storing, and visualizing voice call data
 - **🚀 FastAPI Backend**: High-performance async API with automatic documentation
 - **🗄️ PostgreSQL Database**: Robust data storage with Alembic migrations
 
+## 🖼️ What you will get
+
+### Calls List
+![Main Dashboard](docs/images/main.png)
+
+### Call Insights  
+![Call Insights](docs/images/analysis.png)
+
+### Transcript
+![Transcript](docs/images/transcript.png)
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -231,17 +242,6 @@ voicesummary/
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/api/calls/{call_id}/process-audio` | Process audio file |
-
-## 🖼️ What you will see
-
-### Calls List
-![Main Dashboard](docs/images/main.png)
-
-### Call Insights  
-![Call Insights](docs/images/analysis.png)
-
-### Transcript
-![Transcript](docs/images/transcript.png)
 
 ## 🎯 Use Cases
 

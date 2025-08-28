@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { TranscriptViewer } from '@/components/TranscriptViewer'
 import { TimelineBars } from '@/components/TimelineBars'
+import { EnhancedTimeline } from '@/components/EnhancedTimeline'
 import { Call } from '@/types/call'
 import { ArrowLeftIcon, ClockIcon, UsersIcon } from 'lucide-react'
 
@@ -355,6 +356,151 @@ export default function CallDetailPage() {
         </div>
       </div>
 
+      {/* Call Health Summary */}
+      {call.processed_data && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <h3 className="text-lg font-medium text-gray-900">Call Health Summary</h3>
+                {call.processed_data.summary?.conversation_health_score && (
+                  <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    call.processed_data.summary.conversation_health_score >= 80 
+                      ? 'bg-green-100 text-green-800' 
+                      : call.processed_data.summary.conversation_health_score >= 60 
+                      ? 'bg-yellow-100 text-yellow-800' 
+                      : 'bg-red-100 text-red-800'
+                  }`}>
+                    Score: {call.processed_data.summary.conversation_health_score}/100
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center space-x-6 text-sm text-gray-600">
+                {call.processed_data.summary?.pause_count !== undefined && (
+                  <div className="flex items-center space-x-2">
+                    <span className="font-medium">Pauses:</span>
+                    <span className="text-gray-900">{call.processed_data.summary.pause_count}</span>
+                  </div>
+                )}
+                {call.processed_data.summary?.interruption_count !== undefined && (
+                  <div className="flex items-center space-x-2">
+                    <span className="font-medium">Interruptions:</span>
+                    <span className="text-gray-900">{call.processed_data.summary.interruption_count}</span>
+                  </div>
+                )}
+                {call.processed_data.summary?.termination_issues !== undefined && (
+                  <div className="flex items-center space-x-2">
+                    <span className="font-medium">Termination Issues:</span>
+                    <span className="text-gray-900">{call.processed_data.summary.termination_issues}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pause Information Banners */}
+      {call.processed_data?.pauses && call.processed_data.pauses.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          {/* Pause Summary Header */}
+          {call.processed_data.pauses.length > 1 && (
+            <div className="bg-red-50 border-l-4 border-red-400 rounded-r-lg p-4 mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="flex-shrink-0">
+                  <svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-red-800">
+                    Multiple Pauses Detected
+                  </h3>
+                  <p className="text-sm text-red-700 mt-1">
+                    {call.processed_data.pauses.length} pause{call.processed_data.pauses.length !== 1 ? 's' : ''} found during audio analysis
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div className="space-y-3">
+            {call.processed_data.pauses.map((pause: any, index: number) => {
+              // Determine banner color based on pause count and severity
+              const isSinglePause = call.processed_data.pauses.length === 1;
+              const isLowSeverity = pause.severity === 'low';
+              const shouldShowYellow = isSinglePause && isLowSeverity;
+              const shouldShowRed = !shouldShowYellow; // Multiple pauses or high severity
+              
+              const bannerClasses = shouldShowYellow 
+                ? 'bg-yellow-50 border-l-4 border-yellow-400' 
+                : 'bg-red-50 border-l-4 border-red-400';
+              
+              const iconClasses = shouldShowYellow 
+                ? 'h-5 w-5 text-yellow-400' 
+                : 'h-5 w-5 text-red-400';
+              
+              const textClasses = shouldShowYellow 
+                ? 'text-yellow-800' 
+                : 'text-red-800';
+              
+              const descriptionClasses = shouldShowYellow 
+                ? 'text-yellow-700' 
+                : 'text-red-700';
+              
+              return (
+                <div key={index} className={`${bannerClasses} rounded-r-lg p-4`}>
+                  <div className="flex items-center space-x-3">
+                    <div className="flex-shrink-0">
+                      <svg className={iconClasses} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className={`text-sm font-medium ${textClasses}`}>
+                        Pause #{index + 1}
+                      </h3>
+                      <p className={`mt-1 text-sm ${descriptionClasses}`}>
+                        {pause.duration.toFixed(1)}s pause at {pause.start_time.toFixed(1)}s 
+                        {pause.type && ` (${pause.type})`}
+                        {pause.severity && ` - ${pause.severity} severity`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+        </div>
+      )}
+
+      {/* Termination Issues Banners */}
+      {call.processed_data?.termination?.issues && call.processed_data.termination.issues.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          
+          <div className="space-y-3">
+            {call.processed_data.termination.issues.map((issue: string, index: number) => (
+              <div className="bg-red-50 border-l-4 border-red-400 rounded-r-lg p-4 mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0">
+                    <svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-medium text-red-800">
+                      {issue}
+                    </h3>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+        </div>
+      )}
+
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -366,7 +512,6 @@ export default function CallDetailPage() {
                 <span className="text-2xl mr-3">🎵</span>
                 Audio Player
               </h2>
-              <p>{audioUrl}</p>
               {audioUrl ? (
                 <AudioPlayer 
                   audioUrl={audioUrl} 
@@ -385,7 +530,14 @@ export default function CallDetailPage() {
             </div>
 
             {/* Speaking Activity */}
-            <TimelineBars transcript={transcript} />
+            {call.processed_data ? (
+              <EnhancedTimeline 
+                transcript={transcript} 
+                processedData={call.processed_data}
+              />
+            ) : (
+              <TimelineBars transcript={transcript} />
+            )}
           </div>
 
           {/* Right Column: Transcript */}

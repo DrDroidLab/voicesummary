@@ -56,27 +56,33 @@ export function TranscriptViewer({ transcript }: TranscriptViewerProps) {
           <div className="flex items-center space-x-2 text-green-800">
             <div className="w-2 h-2 bg-green-500 rounded-full"></div>
             <span className="text-sm font-medium">Call Started</span>
-            <span className="text-gray-500">•</span>
-            <span className="text-sm text-gray-600">{formatTimestamp(firstAgentEntry.timestamp)}</span>
+            {/* <span className="text-gray-500">•</span>
+            <span className="text-sm text-gray-600">{formatTimestamp(firstAgentEntry.original_timestamp)}</span> */}
           </div>
         </div>
       )}
 
       {/* Transcript List */}
       <div className="space-y-2 max-h-96 overflow-y-auto">
-        {transcript.turns.map((turn: any, index: number) => (
-          <div key={index} className="text-sm leading-relaxed">
-            <span className="text-gray-500 font-mono">
-              {formatTimestamp(turn.timestamp)}:
-            </span>
-            <span className="text-blue-600 font-medium ml-2">
-              {getRoleDisplayName(turn.role)}:
-            </span>
-            <span className="text-gray-800 ml-2">
-              {turn.content}
-            </span>
+        {transcript.turns && transcript.turns.length > 0 && (
+          <div className="mt-2 text-xs text-gray-500">
+            {transcript.turns.filter((turn: any) => turn.role === 'USER' || turn.role === 'AGENT').map((turn: any, index: number) => (
+              <div key={index} className="ml-2">
+                <div key={index} className="text-sm leading-relaxed">
+                  <span>
+                    {turn.start_time !== undefined ? `${turn.start_time.toFixed(2)}s - ${turn.end_time?.toFixed(2)}s` : 'No timestamp'}
+                  </span>
+                  <span className="text-blue-600 font-medium ml-2">
+                    {getRoleDisplayName(turn.role)}:
+                  </span>
+                  <span className="text-gray-800 ml-2">
+                    {turn.content}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
 
       {/* Call End Info */}
@@ -85,8 +91,8 @@ export function TranscriptViewer({ transcript }: TranscriptViewerProps) {
           <div className="flex items-center space-x-2 text-red-800">
             <div className="w-2 h-2 bg-red-500 rounded-full"></div>
             <span className="text-sm font-medium">Call Ended</span>
-            <span className="text-gray-500">•</span>
-            <span className="text-sm text-gray-600">{formatTimestamp(lastAgentEntry.timestamp)}</span>
+            {/* <span className="text-gray-500">•</span>
+            <span className="text-sm text-gray-600">{formatTimestamp(lastAgentEntry.original_timestamp)}</span> */}
           </div>
         </div>
       )}

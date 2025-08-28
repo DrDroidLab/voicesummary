@@ -1,8 +1,10 @@
 """API endpoints for managing audio calls."""
 
 import logging
+import os
 from datetime import datetime
 from typing import List
+from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
@@ -201,36 +203,37 @@ async def download_audio(call_id: str, db: Session = Depends(get_db)):
     
     # If not an S3 URL or S3 file doesn't exist, download from external URL and upload to S3
     try:
-        # Determine file extension from URL
-        file_extension = "mp3"  # Default
-        if "." in call.audio_file_url:
-            file_extension = call.audio_file_url.split(".")[-1].split("?")[0]
+        logger.info(f"Processing audio for call {call_id}: URL={call.audio_file_url}")
         
-        logger.info(f"Processing audio for call {call_id}: URL={call.audio_file_url}, detected_extension={file_extension}")
-        
-        # Download from external URL and upload to S3
-        s3_url = s3_manager.download_and_upload_audio(call.audio_file_url, call_id, file_extension)
+        # Download from external URL and upload to S3 (extension will be auto-detected)
+        s3_url = s3_manager.download_and_upload_audio(call.audio_file_url, call_id)
         
         if s3_url:
             # Update the database with the new S3 URL
             call.audio_file_url = s3_url
             db.commit()
             
-            # Serve the audio from S3
+            # Extract the detected file extension from the S3 URL
             s3_key = s3_manager.extract_s3_key_from_url(s3_url)
+            if s3_key and "." in s3_key:
+                detected_extension = s3_key.split(".")[-1]
+            else:
+                detected_extension = "mp3"  # fallback
+            
+            # Serve the audio from S3
             audio_file = s3_manager.download_audio_file(s3_key)
             
             if audio_file:
-                # Determine content type from file extension
-                content_type = s3_manager._get_content_type(file_extension)
+                # Determine content type from detected file extension
+                content_type = s3_manager._get_content_type(detected_extension)
                 
-                logger.info(f"Serving audio after S3 upload for call {call_id}: extension={file_extension}, content_type={content_type}")
+                logger.info(f"Serving audio after S3 upload for call {call_id}: extension={detected_extension}, content_type={content_type}")
                 
                 return Response(
                     content=audio_file.read(),
                     media_type=content_type,
                     headers={
-                        "Content-Disposition": f"attachment; filename={call_id}.{file_extension}",
+                        "Content-Disposition": f"attachment; filename={call_id}.{detected_extension}",
                         "Cache-Control": "public, max-age=3600"
                     }
                 )

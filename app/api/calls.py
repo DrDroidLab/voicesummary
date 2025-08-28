@@ -2,16 +2,20 @@
 
 import logging
 import os
+import tempfile
+import asyncio
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Any
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import AudioCall
-from app.schemas import AudioCallCreate, AudioCallResponse, AudioCallUpdate
+from app.schemas import AudioCallCreate, AudioCallCreateWithProcessing, AudioCallResponse, AudioCallUpdate, CallProcessingResponse, CallStatusResponse
 from app.utils.s3 import s3_manager
+from app.utils.audio_processor import process_audio_and_store
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -41,14 +45,6 @@ async def create_call(
             detail=f"Call with ID {call_data.call_id} already exists"
         )
     
-    # Validate that the audio file exists in S3
-    # s3_key = s3_manager.extract_s3_key_from_url(call_data.audio_file_url)
-    # if not s3_key or not s3_manager.file_exists(s3_key):
-    #     raise HTTPException(
-    #         status_code=status.HTTP_400_BAD_REQUEST,
-    #         detail="Audio file not found in S3"
-    #     )
-    
     # Create new call record
     db_call = AudioCall(
         call_id=call_data.call_id,
@@ -64,6 +60,159 @@ async def create_call(
         return db_call
     except Exception as e:
         db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create call: {str(e)}"
+        )
+
+
+async def process_call_background(call_id: str, audio_url: str, transcript_data: Dict[str, Any], call_timestamp: datetime):
+    """
+    Background task to process a call asynchronously.
+    
+    This function runs in the background after the API response is sent.
+    
+    Args:
+        call_id: Unique identifier for the call
+        audio_url: URL of the audio file to process
+        transcript_data: Transcript data to enhance
+        call_timestamp: Timestamp of the call
+    """
+    try:
+        logger.info(f"Starting background processing for call {call_id}")
+        
+        # Download audio file from external URL
+        logger.info(f"Downloading audio from: {audio_url}")
+        
+        # Create temporary file for audio processing
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
+            temp_audio_path = temp_file.name
+        
+        try:
+            # Download audio file
+            import requests
+            response = requests.get(audio_url, stream=True)
+            response.raise_for_status()
+            
+            # Save to temporary file
+            with open(temp_audio_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            
+            logger.info(f"Successfully downloaded audio to temporary file: {temp_audio_path}")
+            
+            # Prepare S3 configuration
+            s3_config = {
+                'access_key': settings.aws_access_key_id,
+                'secret_key': settings.aws_secret_access_key,
+                'region': settings.aws_region,
+                'bucket': settings.s3_bucket_name
+            }
+            
+            # Process audio and store results using the same function as Bolna integration
+            logger.info(f"Processing audio and transcript for call {call_id}")
+            success, message = process_audio_and_store(
+                audio_file_path=temp_audio_path,
+                transcript_data=transcript_data,
+                call_id=call_id,
+                call_timestamp=call_timestamp,
+                database_url=settings.database_url,
+                s3_config=s3_config
+            )
+            
+            if success:
+                logger.info(f"Successfully processed call {call_id} in background: {message}")
+            else:
+                logger.error(f"Failed to process call {call_id} in background: {message}")
+                
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_audio_path):
+                os.unlink(temp_audio_path)
+                logger.info(f"Cleaned up temporary file: {temp_audio_path}")
+                
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to download audio for call {call_id} in background: {e}")
+    except Exception as e:
+        logger.error(f"Error processing call {call_id} in background: {e}")
+
+
+@router.post("/create-and-process", response_model=CallProcessingResponse, status_code=status.HTTP_201_CREATED)
+async def create_and_process_call(
+    call_data: AudioCallCreateWithProcessing,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new audio call record and optionally process it in the background.
+    
+    This endpoint provides feature parity with the Bolna integration by:
+    1. Creating the call record in the database (immediate)
+    2. Returning response to API caller immediately
+    3. If process_immediately is True, starting background processing:
+       - Downloading the audio file from the provided URL
+       - Processing the audio using the voice analyzer
+       - Enhancing the transcript with accurate timestamps
+       - Storing the processed data and uploading audio to S3
+    
+    Args:
+        call_data: Call information with processing option
+        db: Database session
+        
+    Returns:
+        Processing status and results
+    """
+    # Check if call_id already exists
+    existing_call = db.query(AudioCall).filter(AudioCall.call_id == call_data.call_id).first()
+    if existing_call:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Call with ID {call_data.call_id} already exists"
+        )
+    
+    try:
+        # Create new call record
+        db_call = AudioCall(
+            call_id=call_data.call_id,
+            transcript=call_data.transcript,
+            audio_file_url=call_data.audio_file_url,
+            timestamp=call_data.timestamp or datetime.utcnow()
+        )
+        
+        db.add(db_call)
+        db.commit()
+        db.refresh(db_call)
+        
+        # If immediate processing is requested, start background processing
+        if call_data.process_immediately:
+            logger.info(f"Starting background processing for call {call_data.call_id}")
+            
+            # Start background processing task
+            asyncio.create_task(
+                process_call_background(
+                    call_id=call_data.call_id,
+                    audio_url=call_data.audio_file_url,
+                    transcript_data=call_data.transcript,
+                    call_timestamp=call_data.timestamp or datetime.utcnow()
+                )
+            )
+            
+            # Return immediately with processing status
+            return CallProcessingResponse(
+                status="processing",
+                message="Call created successfully. Processing started in background.",
+                call_id=call_data.call_id
+            )
+        else:
+            # Return success without processing
+            return CallProcessingResponse(
+                status="created",
+                message="Call created successfully. Use /{call_id}/process-full to process it.",
+                call_id=call_data.call_id
+            )
+            
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to create call {call_data.call_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create call: {str(e)}"
@@ -278,7 +427,152 @@ async def get_transcript(call_id: str, db: Session = Depends(get_db)):
     return {"call_id": call_id, "transcript": call.transcript}
 
 
-@router.post("/{call_id}/process-audio")
+async def process_call_full_internal(call_id: str, db: Session) -> Dict[str, Any]:
+    """
+    Internal function to process a call completely.
+    
+    This is extracted from the public endpoint to allow reuse.
+    
+    Args:
+        call_id: Unique identifier for the call
+        db: Database session
+        
+    Returns:
+        Processing results dictionary
+    """
+    # Get the call record
+    call = db.query(AudioCall).filter(AudioCall.call_id == call_id).first()
+    if not call:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Call with ID {call_id} not found"
+        )
+    
+    # Check if audio_file_url exists
+    if not call.audio_file_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No audio file URL available for this call"
+        )
+    
+    # Check if already fully processed
+    if call.processed_data and call.audio_file_url.startswith(f"https://{s3_manager.bucket_name}.s3.amazonaws.com/"):
+        return {
+            "status": "already_processed",
+            "message": "Call already fully processed with audio analysis and S3 storage",
+            "call_id": call_id,
+            "processed_data": call.processed_data,
+            "s3_url": call.audio_file_url
+        }
+    
+    try:
+        logger.info(f"Starting full processing for call {call_id}")
+        
+        # Download audio file from external URL
+        logger.info(f"Downloading audio from: {call.audio_file_url}")
+        
+        # Create temporary file for audio processing
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
+            temp_audio_path = temp_file.name
+        
+        try:
+            # Download audio file
+            import requests
+            response = requests.get(call.audio_file_url, stream=True)
+            response.raise_for_status()
+            
+            # Save to temporary file
+            with open(temp_audio_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            
+            logger.info(f"Successfully downloaded audio to temporary file: {temp_audio_path}")
+            
+            # Prepare S3 configuration
+            s3_config = {
+                'access_key': settings.aws_access_key_id,
+                'secret_key': settings.aws_secret_access_key,
+                'region': settings.aws_region,
+                'bucket': settings.s3_bucket_name
+            }
+            
+            # Process audio and store results using the same function as Bolna integration
+            logger.info(f"Processing audio and transcript for call {call_id}")
+            success, message = process_audio_and_store(
+                audio_file_path=temp_audio_path,
+                transcript_data=call.transcript,
+                call_id=call_id,
+                call_timestamp=call.timestamp,
+                database_url=settings.database_url,
+                s3_config=s3_config
+            )
+            
+            if success:
+                # Refresh the call record to get updated data
+                db.refresh(call)
+                
+                logger.info(f"Successfully processed call {call_id}: {message}")
+                
+                return {
+                    "status": "success",
+                    "message": message,
+                    "call_id": call_id,
+                    "processed_data": call.processed_data,
+                    "s3_url": call.audio_file_url
+                }
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to process audio: {message}"
+                )
+                
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_audio_path):
+                os.unlink(temp_audio_path)
+                logger.info(f"Cleaned up temporary file: {temp_audio_path}")
+                
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to download audio for call {call_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to download audio file: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Error processing call {call_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process call: {str(e)}"
+        )
+
+
+@router.post("/{call_id}/process-full", response_model=CallProcessingResponse, status_code=status.HTTP_200_OK)
+async def process_call_full(
+    call_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Process a call completely: download audio, analyze it, enhance transcript, and store results.
+    
+    This endpoint provides feature parity with the Bolna integration by:
+    1. Downloading the audio file from the provided URL
+    2. Processing the audio using the voice analyzer
+    3. Enhancing the transcript with accurate timestamps
+    4. Storing the processed data in the database
+    5. Uploading the audio file to S3
+    
+    Args:
+        call_id: Unique identifier for the call
+        db: Database session
+        
+    Returns:
+        Processing status and results
+    """
+    result = await process_call_full_internal(call_id, db)
+    return CallProcessingResponse(**result)
+
+
+@router.post("/{call_id}/process-audio", status_code=status.HTTP_200_OK)
 async def process_audio(call_id: str, db: Session = Depends(get_db)):
     """
     Process audio file for a specific call by downloading from external URL and uploading to S3.
@@ -345,6 +639,47 @@ async def process_audio(call_id: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process audio file: {str(e)}"
         )
+
+
+@router.get("/{call_id}/status")
+async def get_call_processing_status(call_id: str, db: Session = Depends(get_db)):
+    """
+    Get the processing status of a call.
+    
+    Args:
+        call_id: Unique identifier for the call
+        db: Database session
+        
+    Returns:
+        Processing status information
+    """
+    call = db.query(AudioCall).filter(AudioCall.call_id == call_id).first()
+    if not call:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Call with ID {call_id} not found"
+        )
+    
+    # Determine processing status
+    if call.processed_data and call.audio_file_url.startswith(f"https://{s3_manager.bucket_name}.s3.amazonaws.com/"):
+        status = "completed"
+        message = "Call has been fully processed with audio analysis and S3 storage"
+    elif call.processed_data:
+        status = "partially_processed"
+        message = "Call has been processed but audio may not be in S3 yet"
+    else:
+        status = "pending"
+        message = "Call is pending processing"
+    
+    return CallStatusResponse(
+        call_id=call_id,
+        status=status,
+        message=message,
+        has_processed_data=bool(call.processed_data),
+        audio_in_s3=call.audio_file_url.startswith(f"https://{s3_manager.bucket_name}.s3.amazonaws.com/"),
+        created_at=call.created_at.isoformat() if call.created_at else None,
+        updated_at=call.updated_at.isoformat() if call.updated_at else None
+    )
 
 
 @router.get("/", response_model=List[AudioCallResponse])

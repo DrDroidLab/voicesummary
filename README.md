@@ -232,6 +232,17 @@ voicesummary/
 |--------|----------|-------------|
 | `POST` | `/api/calls/{call_id}/process-audio` | Process audio file |
 
+## 🖼️ What you will see
+
+### Calls List
+![Main Dashboard](docs/images/main.png)
+
+### Call Insights  
+![Call Insights](docs/images/analysis.png)
+
+### Transcript
+![Transcript](docs/images/transcript.png)
+
 ## 🎯 Use Cases
 
 ### Voice Agent Analytics
@@ -406,7 +417,7 @@ aws s3 ls s3://your-bucket-name
 
 - **Issues**: Create a GitHub issue with detailed error information
 - **Discussions**: Use GitHub Discussions for questions and ideas
-- **Documentation**: Check the API docs at `/docs` endpoint
+- **Reachout**: Reach out to the author at dipesh@drdroid.io
 
 ## 📄 License
 

@@ -163,8 +163,24 @@ export function CallList() {
     )
   }
 
+  // Calculate overall statistics for processed calls
+  const processedCalls = calls.filter(call => call.processed_data)
+  const totalProcessedCalls = processedCalls.length
+  
+  const averageHealthScore = totalProcessedCalls > 0 
+    ? Math.round(processedCalls.reduce((sum, call) => 
+        sum + (call.processed_data?.call_health_score || 0), 0) / totalProcessedCalls)
+    : 0
+  
+  const totalPauses = processedCalls.reduce((sum, call) => 
+    sum + (call.processed_data?.pauses?.length || 0), 0)
+  
+  const totalIssues = processedCalls.reduce((sum, call) => 
+    sum + (call.processed_data?.termination?.issues?.length || 0), 0)
+
   return (
     <div className="space-y-6">
+
       {/* Search Bar */}
       <div className="relative">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -194,8 +210,22 @@ export function CallList() {
                 </div>
               </div>
               <div>
-                <div className="font-semibold text-gray-900 group-hover:text-primary-700 transition-colors duration-200 text-lg">
-                  {call.call_id}
+                <div className="flex items-center space-x-2">
+                  <div className="font-semibold text-gray-900 group-hover:text-primary-700 transition-colors duration-200 text-lg">
+                    {call.call_id}
+                  </div>
+                  {/* Processing Status Badge */}
+                  {call.processed_data ? (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <span className="w-2 h-2 bg-green-400 rounded-full mr-1"></span>
+                      Processed
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                      <span className="w-2 h-2 bg-gray-400 rounded-full mr-1"></span>
+                      Raw
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center text-sm text-gray-500 mt-1">
                   <ClockIcon className="w-4 h-4 mr-2" />
@@ -204,12 +234,57 @@ export function CallList() {
               </div>
             </div>
             <div className="text-right">
+              {/* Processed Data Metrics */}
+              {call.processed_data && (
+                <div className="mb-2 space-y-1">
+                  {/* Call Health Score */}
+                  {call.processed_data.call_health_score !== undefined && (
+                    <div className="flex items-center justify-end space-x-2">
+                      <span className="text-xs text-gray-500">Health:</span>
+                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                        call.processed_data.call_health_score >= 80 ? 'bg-green-100 text-green-800' :
+                        call.processed_data.call_health_score >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {call.processed_data.call_health_score}%
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Pause Count */}
+                  {call.processed_data.pauses && call.processed_data.pauses.length > 0 && (
+                    <div className="flex items-center justify-end space-x-2">
+                      <span className="text-xs text-gray-500">Pauses:</span>
+                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                        call.processed_data.pauses.length === 1 ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {call.processed_data.pauses.length}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Termination Issues */}
+                  {call.processed_data.termination && call.processed_data.termination.issues && call.processed_data.termination.issues.length > 0 && (
+                    <div className="flex items-center justify-end space-x-2">
+                      <span className="text-xs text-gray-500">Issues:</span>
+                      <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800">
+                        {call.processed_data.termination.issues.length}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Participants Count */}
               <div className="text-sm text-gray-600 font-medium mb-1">
                 {call.transcript && typeof call.transcript === 'object' && call.transcript.participants
                   ? `${call.transcript.participants.length} participants`
                   : 'No participants'
                 }
               </div>
+              
+              {/* View Details Link */}
               <div className="flex items-center text-xs text-gray-400 group-hover:text-primary-500 transition-colors duration-200">
                 <span className="mr-2">View details</span>
                 <ExternalLinkIcon className="w-4 h-4" />

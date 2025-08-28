@@ -28,20 +28,25 @@ class S3Manager:
         )
         self.bucket_name = settings.s3_bucket_name
     
-    def download_and_upload_audio(self, audio_url: str, call_id: str, file_extension: str = "mp3") -> Optional[str]:
+    def download_and_upload_audio(self, audio_url: str, call_id: str, file_extension: str = None) -> Optional[tuple[str, str]]:
         """
         Download audio file from external URL and upload to S3.
         
         Args:
             audio_url: URL of the audio file to download
             call_id: Unique identifier for the call (used in S3 key)
-            file_extension: File extension for the audio file (default: mp3)
+            file_extension: File extension for the audio file (if None, will be detected from URL or file headers)
             
         Returns:
-            S3 URL of the uploaded file, or None if operation fails
+            Tuple of (S3 URL, detected file extension), or None if operation fails
         """
         try:
             logger.info(f"Downloading audio from {audio_url} for call {call_id}")
+            
+            # If no file extension provided, try to detect it from the URL
+            if file_extension is None:
+                file_extension = self._extract_file_extension_from_url(audio_url)
+                logger.info(f"Detected file extension from URL: {file_extension}")
             
             # Download the audio file
             response = requests.get(audio_url, stream=True, timeout=30)
@@ -157,6 +162,44 @@ class S3Manager:
                 
         except Exception as e:
             logger.error(f"Error detecting audio format from headers: {e}")
+            return 'mp3'  # Default fallback
+    
+    def _extract_file_extension_from_url(self, url: str) -> str:
+        """
+        Safely extract file extension from a URL.
+        
+        Args:
+            url: URL to extract extension from
+            
+        Returns:
+            File extension (defaults to 'mp3' if extraction fails)
+        """
+        try:
+            from urllib.parse import urlparse
+            import os
+            
+            # Parse the URL to get the path component
+            parsed_url = urlparse(url)
+            path = parsed_url.path
+            
+            # Get the filename from the path
+            filename = os.path.basename(path)
+            
+            # Extract extension from filename
+            if "." in filename:
+                extension = filename.split(".")[-1].split("?")[0]
+                # Validate that it's a reasonable audio extension
+                if extension.lower() in ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'mp4']:
+                    return extension.lower()
+                else:
+                    logger.warning(f"Invalid audio extension '{extension}' from URL, using default 'mp3'")
+                    return 'mp3'
+            else:
+                logger.info(f"No file extension found in URL path '{path}', using default 'mp3'")
+                return 'mp3'
+                
+        except Exception as e:
+            logger.error(f"Error extracting file extension from URL {url}: {e}")
             return 'mp3'  # Default fallback
     
     def download_audio_file(self, s3_key: str) -> Optional[BinaryIO]:

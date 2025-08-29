@@ -142,7 +142,19 @@ class AudioProcessor:
                 call_timestamp
             )
             
-            # Step 4: Always upload local audio file to S3 (don't use existing URLs)
+            # Step 4: Generate transcript summary using OpenAI
+            logger.info("Generating transcript summary using OpenAI")
+            transcript_summary = self._generate_transcript_summary(enhanced_transcript)
+            if transcript_summary:
+                # Add summary to analysis results
+                if 'processed_data' not in analysis_results:
+                    analysis_results['processed_data'] = {}
+                analysis_results['processed_data']['transcript_summary'] = transcript_summary
+                logger.info("Transcript summary generated successfully")
+            else:
+                logger.warning("Failed to generate transcript summary")
+            
+            # Step 5: Always upload local audio file to S3 (don't use existing URLs)
             logger.info("Uploading audio file to S3 with detected format")
             s3_url = self._upload_audio_to_s3(audio_file_path, call_id)
             if not s3_url:
@@ -150,7 +162,7 @@ class AudioProcessor:
             
             logger.info(f"Successfully uploaded audio to S3: {s3_url}")
             
-            # Step 5: Store in database
+            # Step 6: Store in database
             logger.info("Storing call data in database")
             success = self._store_call_in_database(
                 call_id=call_id,
@@ -476,6 +488,27 @@ class AudioProcessor:
             return existing_call is not None
         finally:
             session.close()
+    
+    def _generate_transcript_summary(self, transcript: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Generate a summary of the transcript using OpenAI.
+        
+        Args:
+            transcript: Enhanced transcript data
+            
+        Returns:
+            Summary results dictionary, or None if failed
+        """
+        try:
+            from .transcript_summarizer import summarize_transcript
+            
+            # Generate summary
+            summary = summarize_transcript(transcript)
+            return summary
+            
+        except Exception as e:
+            logger.warning(f"Failed to generate transcript summary: {e}")
+            return None
 
 
 def process_audio_and_store(

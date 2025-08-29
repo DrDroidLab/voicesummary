@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     # Bolna API Configuration
     bolna_api_key: Optional[str] = None
     
+    # OpenAI Configuration
+    openai_api_key: Optional[str] = None
+    openai_model: str = "gpt-4o"
+    
     # Application
     app_host: str = "0.0.0.0"
     app_port: int = 8000

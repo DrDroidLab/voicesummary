@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import AudioCall
-from app.schemas import AudioCallCreate, AudioCallCreateWithProcessing, AudioCallResponse, AudioCallUpdate, CallProcessingResponse, CallStatusResponse
+from app.schemas import AudioCallCreate, AudioCallCreateWithProcessing, AudioCallResponse, AudioCallUpdate, CallProcessingResponse, CallStatusResponse, AgentAnalysisRequest, AgentAnalysisResponse
 from app.utils.s3 import s3_manager
 from app.utils.audio_processor import process_audio_and_store
 from app.config import settings
@@ -52,6 +52,49 @@ async def create_call(
         audio_file_url=call_data.audio_file_url,
         timestamp=call_data.timestamp or datetime.utcnow()
     )
+    
+    # Initialize processed_data
+    if not db_call.processed_data:
+        db_call.processed_data = {}
+    
+    # Generate transcript summary using OpenAI
+    try:
+        from app.utils.transcript_summarizer import summarize_transcript
+        transcript_summary = summarize_transcript(
+            transcript=call_data.transcript,
+            call_context=call_data.call_context
+        )
+        
+        if transcript_summary:
+            db_call.processed_data['transcript_summary'] = transcript_summary
+            logger.info(f"Transcript summary completed for call {call_data.call_id}")
+        else:
+            logger.warning(f"Transcript summary failed for call {call_data.call_id}")
+            
+    except Exception as e:
+        logger.warning(f"Could not perform transcript summarization for call {call_data.call_id}: {e}")
+        # Continue without transcript summary
+    
+    # If agent type is specified, perform agent analysis
+    if call_data.agent_type:
+        try:
+            from app.utils.agent_analyzer import AgentAnalyzer
+            analyzer = AgentAnalyzer()
+            analysis_result = analyzer.analyze_agent_performance(
+                transcript=call_data.transcript,
+                agent_type=call_data.agent_type,
+                call_context=call_data.call_context
+            )
+            
+            if 'error' not in analysis_result:
+                db_call.processed_data['agent_analysis'] = analysis_result
+                logger.info(f"Agent analysis completed for call {call_data.call_id}")
+            else:
+                logger.warning(f"Agent analysis failed for call {call_data.call_id}: {analysis_result['error']}")
+                
+        except Exception as e:
+            logger.warning(f"Could not perform agent analysis for call {call_data.call_id}: {e}")
+            # Continue without agent analysis
     
     try:
         db.add(db_call)
@@ -177,6 +220,49 @@ async def create_and_process_call(
             audio_file_url=call_data.audio_file_url,
             timestamp=call_data.timestamp or datetime.utcnow()
         )
+        
+        # Initialize processed_data
+        if not db_call.processed_data:
+            db_call.processed_data = {}
+        
+        # Generate transcript summary using OpenAI
+        try:
+            from app.utils.transcript_summarizer import summarize_transcript
+            transcript_summary = summarize_transcript(
+                transcript=call_data.transcript,
+                call_context=call_data.call_context
+            )
+            
+            if transcript_summary:
+                db_call.processed_data['transcript_summary'] = transcript_summary
+                logger.info(f"Transcript summary completed for call {call_data.call_id}")
+            else:
+                logger.warning(f"Transcript summary failed for call {call_data.call_id}")
+                
+        except Exception as e:
+            logger.warning(f"Could not perform transcript summarization for call {call_data.call_id}: {e}")
+            # Continue without transcript summary
+        
+        # If agent type is specified, perform agent analysis
+        if call_data.agent_type:
+            try:
+                from app.utils.agent_analyzer import AgentAnalyzer
+                analyzer = AgentAnalyzer()
+                analysis_result = analyzer.analyze_agent_performance(
+                    transcript=call_data.transcript,
+                    agent_type=call_data.agent_type,
+                    call_context=call_data.call_context
+                )
+                
+                if 'error' not in analysis_result:
+                    db_call.processed_data['agent_analysis'] = analysis_result
+                    logger.info(f"Agent analysis completed for call {call_data.call_id}")
+                else:
+                    logger.warning(f"Agent analysis failed for call {call_data.call_id}: {analysis_result['error']}")
+                    
+            except Exception as e:
+                logger.warning(f"Could not perform agent analysis for call {call_data.call_id}: {e}")
+                # Continue without agent analysis
         
         db.add(db_call)
         db.commit()
@@ -769,4 +855,90 @@ async def delete_call(call_id: str, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete call: {str(e)}"
+        )
+
+
+
+@router.post("/{call_id}/analyze-agent", response_model=AgentAnalysisResponse, status_code=status.HTTP_200_OK)
+async def analyze_agent_performance(
+    call_id: str,
+    analysis_request: AgentAnalysisRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Analyze agent performance for a specific call using OpenAI.
+    
+    Args:
+        call_id: Unique identifier for the call
+        analysis_request: Analysis request with agent type and context
+        db: Database session
+        
+    Returns:
+        Agent performance analysis results
+    """
+    # Get the call record
+    call = db.query(AudioCall).filter(AudioCall.call_id == call_id).first()
+    if not call:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Call with ID {call_id} not found"
+        )
+    
+    # Check if transcript exists
+    if not call.transcript:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No transcript available for analysis"
+        )
+    
+    try:
+        # Import agent analyzer
+        from app.utils.agent_analyzer import AgentAnalyzer
+        
+        # Initialize analyzer
+        analyzer = AgentAnalyzer()
+        
+        # Perform analysis
+        analysis_result = analyzer.analyze_agent_performance(
+            transcript=call.transcript,
+            agent_type=analysis_request.agent_type,
+            call_context=analysis_request.call_context
+        )
+        
+        # Check if analysis was successful
+        if 'error' in analysis_result:
+            return AgentAnalysisResponse(
+                call_id=call_id,
+                analysis_result=analysis_result,
+                agent_type=analysis_result.get('metadata', {}).get('agent_type', 'unknown'),
+                agent_name=analysis_result.get('metadata', {}).get('agent_name', 'Unknown'),
+                analysis_timestamp=analysis_result.get('metadata', {}).get('analysis_timestamp', ''),
+                model_used=analysis_result.get('metadata', {}).get('model_used', ''),
+                success=False,
+                error_message=analysis_result['error']
+            )
+        
+        # Update the call's processed_data with agent analysis
+        if not call.processed_data:
+            call.processed_data = {}
+        
+        call.processed_data['agent_analysis'] = analysis_result
+        db.commit()
+        
+        return AgentAnalysisResponse(
+            call_id=call_id,
+            analysis_result=analysis_result,
+            agent_type=analysis_result.get('metadata', {}).get('agent_type', 'unknown'),
+            agent_name=analysis_result.get('metadata', {}).get('agent_name', 'Unknown'),
+            analysis_timestamp=analysis_result.get('metadata', {}).get('analysis_timestamp', ''),
+            model_used=analysis_result.get('metadata', {}).get('model_used', ''),
+            success=True,
+            error_message=None
+        )
+        
+    except Exception as e:
+        logger.error(f"Error analyzing agent performance for call {call_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze agent performance: {str(e)}"
         )

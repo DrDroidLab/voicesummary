@@ -12,6 +12,8 @@ class AudioCallCreate(BaseModel):
     transcript: Dict[str, Any] = Field(..., description="Call transcript as JSON")
     audio_file_url: str = Field(..., description="S3 URL for the audio file")
     processed_data: Optional[Dict[str, Any]] = Field(None, description="Processed analysis data as JSON (optional)")
+    agent_type: Optional[str] = Field(None, description="Type of agent for performance analysis (optional)")
+    call_context: Optional[str] = Field(None, description="Additional context about the call (optional)")
     timestamp: Optional[datetime] = Field(None, description="Call timestamp (optional, defaults to now)")
 
 
@@ -22,6 +24,8 @@ class AudioCallCreateWithProcessing(BaseModel):
     transcript: Dict[str, Any] = Field(..., description="Call transcript as JSON")
     audio_file_url: str = Field(..., description="URL for the audio file (will be processed and uploaded to S3)")
     processed_data: Optional[Dict[str, Any]] = Field(None, description="Processed analysis data as JSON (optional)")
+    agent_type: Optional[str] = Field(None, description="Type of agent for performance analysis (optional)")
+    call_context: Optional[str] = Field(None, description="Additional context about the call (optional)")
     timestamp: Optional[datetime] = Field(None, description="Call timestamp (optional, defaults to now)")
     process_immediately: bool = Field(False, description="Whether to process the call immediately after creation")
 
@@ -75,5 +79,26 @@ class CallStatusResponse(BaseModel):
     message: str = Field(..., description="Human-readable message about the current status")
     has_processed_data: bool = Field(..., description="Whether the call has processed analysis data")
     audio_in_s3: bool = Field(..., description="Whether the audio file is stored in S3")
-    created_at: Optional[str] = Field(None, description="ISO timestamp when the call was created")
-    updated_at: Optional[str] = Field(None, description="ISO timestamp when the call was last updated")
+    created_at: Optional[str] = Field(..., description="ISO timestamp when the call was created")
+    updated_at: Optional[str] = Field(..., description="ISO timestamp when the call was last updated")
+
+
+class AgentAnalysisRequest(BaseModel):
+    """Schema for requesting agent performance analysis."""
+    
+    call_id: str = Field(..., description="The call ID to analyze")
+    agent_type: Optional[str] = Field(None, description="Type of agent for analysis (optional, will use default if not specified)")
+    call_context: Optional[str] = Field(None, description="Additional context about the call (optional)")
+
+
+class AgentAnalysisResponse(BaseModel):
+    """Schema for agent performance analysis response."""
+    
+    call_id: str = Field(..., description="The call ID that was analyzed")
+    analysis_result: Dict[str, Any] = Field(..., description="Complete analysis results")
+    agent_type: str = Field(..., description="Type of agent that was analyzed")
+    agent_name: str = Field(..., description="Name of the agent type")
+    analysis_timestamp: str = Field(..., description="When the analysis was performed")
+    model_used: str = Field(..., description="OpenAI model used for analysis")
+    success: bool = Field(..., description="Whether the analysis was successful")
+    error_message: Optional[str] = Field(None, description="Error message if analysis failed")

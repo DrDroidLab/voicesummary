@@ -16,48 +16,6 @@ A comprehensive platform for analyzing, storing, and visualizing voice call data
 - **🗄️ PostgreSQL Database**: Robust data storage with Alembic migrations
 - **⚡ Asynchronous Processing**: Real-time API responses with background audio processing
 
-## 🔄 Asynchronous Call Processing
-
-The Voice Summary API supports **asynchronous call processing**:
-
-### **Key Benefits**
-- **⚡ Immediate API Response**: Database write happens in real-time, API responds within 50-100ms
-- **🔄 Background Processing**: Audio analysis, transcript enhancement, and S3 uploads happen asynchronously
-- **📊 Real-time Status**: Monitor processing progress via dedicated status endpoints
-- **🔄 Feature Parity**: Same processing pipeline as Bolna integration (librosa analysis, S3 storage)
-
-### **API Endpoints**
-```http
-# Create call and start background processing
-POST /api/calls/create-and-process
-
-# Check processing status
-GET /api/calls/{call_id}/status
-
-# Process existing call
-POST /api/calls/{call_id}/process-full
-```
-
-### **Usage Example**
-```python
-import requests
-
-# Create call with immediate processing
-response = requests.post("http://localhost:8000/api/calls/create-and-process", json={
-    "call_id": "call_123",
-    "transcript": {"turns": [...]},
-    "audio_file_url": "https://example.com/audio.mp3",
-    "process_immediately": True
-})
-
-# Get immediate response
-call_data = response.json()  # status: "processing"
-
-# Monitor progress
-status = requests.get(f"http://localhost:8000/api/calls/{call_data['call_id']}/status").json()
-# status: "completed" when done
-```
-
 ## 🖼️ What you will get
 
 ### Calls List
@@ -68,6 +26,12 @@ status = requests.get(f"http://localhost:8000/api/calls/{call_data['call_id']}/s
 
 ### Transcript
 ![Transcript](docs/images/transcript.png)
+
+### Transcript Analysis
+![Transcript](docs/images/transcript_analysis.png)
+
+### Audio Analysis
+![Transcript](docs/images/audio_analysis.png)
 
 ## 🚀 Quick Start
 
@@ -170,6 +134,9 @@ S3_BUCKET_NAME=your-audio-bucket
 
 # Optional: Bolna API (if using Bolna platform)
 BOLNA_API_KEY=your_bolna_api_key
+
+# OpenAI API (required for transcript analysis and agent performance evaluation)
+OPENAI_API_KEY=your_openai_api_key
 ```
 
 ### Database Setup
@@ -185,6 +152,25 @@ alembic upgrade head
 ## 📥 Data Ingestion
 
 Voice Summary supports two main data ingestion methods:
+
+### ⚠️ Important: OpenAI API Key Required
+
+**For full functionality, you need to add your OpenAI API key to the environment variables:**
+
+```bash
+OPENAI_API_KEY=your_openai_api_key
+```
+
+**What happens with OpenAI API key:**
+- ✅ **Transcript Analysis**: AI-powered call outcome analysis, quality assessment, and improvement areas
+- ✅ **Agent Performance Evaluation**: Goal achievement analysis and script adherence evaluation
+- ✅ **Executive Summaries**: Intelligent call summaries with key insights
+
+**What happens without OpenAI API key:**
+- ✅ **Audio Analysis**: Pause detection, speech segmentation, conversation health scoring
+- ✅ **Basic Processing**: Audio file processing and S3 storage
+- ❌ **No Transcript Analysis**: Call outcome, quality metrics, and improvement areas won't be generated
+- ❌ **No Agent Evaluation**: Performance analysis and script adherence won't be available
 
 ### Method 1: Direct API Calls (Recommended for Custom Integrations)
 
@@ -373,6 +359,9 @@ DATABASE_URL=postgresql://user:pass@host:5432/db
 AWS_ACCESS_KEY_ID=your_key
 AWS_SECRET_ACCESS_KEY=your_secret
 S3_BUCKET_NAME=your_bucket
+
+# OpenAI API (required for transcript analysis)
+OPENAI_API_KEY=your_openai_api_key
 
 # Optional
 ENVIRONMENT=production

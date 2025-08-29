@@ -9,3 +9,7 @@ pydantic>=2.5.0
 pydantic-settings>=2.0.0
 python-dotenv>=1.0.0
 requests>=2.31.0
+openai>=1.0.0
+pyyaml>=6.0
+librosa==0.11.0
+openai==1.101.0

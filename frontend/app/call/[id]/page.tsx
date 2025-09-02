@@ -7,6 +7,7 @@ import { TranscriptAnalysis } from '@/components/TranscriptAnalysis'
 import { AudioAnalysis } from '@/components/AudioAnalysis'
 import { MediaSection } from '@/components/MediaSection'
 import { TranscriptViewer } from '@/components/TranscriptViewer'
+import { ExtractedData } from '@/components/ExtractedData'
 import { TabbedLayout } from '@/components/TabbedLayout'
 import { Call } from '@/types/call'
 import { ArrowLeftIcon, ClockIcon, UsersIcon } from 'lucide-react'
@@ -475,6 +476,16 @@ export default function CallDetailPage() {
                       <p>No transcript available</p>
                     </div>
                   )}
+                </div>
+              )
+            },
+            {
+              id: 'extracted-data',
+              label: 'Extracted Data',
+              icon: '🔍',
+              content: (
+                <div>
+                  <ExtractedData callId={callId} />
                 </div>
               )
             }

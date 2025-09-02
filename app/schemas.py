@@ -102,3 +102,43 @@ class AgentAnalysisResponse(BaseModel):
     model_used: str = Field(..., description="OpenAI model used for analysis")
     success: bool = Field(..., description="Whether the analysis was successful")
     error_message: Optional[str] = Field(None, description="Error message if analysis failed")
+
+# New schemas for extracted data
+class ExtractedDataResponse(BaseModel):
+    """Schema for extracted data response."""
+    
+    call_id: str = Field(..., description="The call ID")
+    extraction_data: Optional[Dict[str, Any]] = Field(None, description="Extracted structured data")
+    classification_data: Optional[Dict[str, Any]] = Field(None, description="Classification results")
+    labeling_data: Optional[Dict[str, Any]] = Field(None, description="Labeling results")
+    processing_status: str = Field(..., description="Processing status: pending, processing, completed, failed")
+    processing_errors: Optional[Dict[str, str]] = Field(None, description="Any errors during processing")
+    created_at: int = Field(..., description="Epoch timestamp when the data was created")
+    updated_at: int = Field(..., description="Epoch timestamp when the data was last updated")
+    
+    @field_validator('created_at', 'updated_at', mode='before')
+    @classmethod
+    def convert_datetime_to_epoch(cls, v):
+        if isinstance(v, datetime):
+            return int(v.timestamp())
+        return v
+    
+    class Config:
+        from_attributes = True
+
+
+class CallDataPipelineRequest(BaseModel):
+    """Schema for requesting call data pipeline processing."""
+    
+    call_id: str = Field(..., description="The call ID to process")
+    force_reprocess: bool = Field(False, description="Whether to force reprocessing even if data exists")
+
+
+class CallDataPipelineResponse(BaseModel):
+    """Schema for call data pipeline response."""
+    
+    call_id: str = Field(..., description="The call ID that was processed")
+    status: str = Field(..., description="Processing status: success, error, or already_processed")
+    message: str = Field(..., description="Human-readable message about the processing result")
+    extracted_data: Optional[ExtractedDataResponse] = Field(None, description="Extracted data if successful")
+    errors: Optional[Dict[str, str]] = Field(None, description="Any errors during processing")

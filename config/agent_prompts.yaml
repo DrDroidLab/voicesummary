@@ -1,1 +1,166 @@
-default_agent_prompt: ""
+# Agent Prompts Configuration for Call Analysis Pipeline
+# This file contains prompts for data extraction, classification, and labeling
+
+# Data Extraction Prompts
+# These prompts extract structured data from call transcripts
+extraction:
+  customer_info:
+    prompt: |
+      Extract customer information from this transcript: {transcript}
+      
+      Return only a JSON object with: customer_name, customer_email, customer_phone, customer_id, account_number
+      Set to null if not found.
+
+  product_mentions:
+    prompt: |
+      Extract products and services mentioned in this transcript: {transcript}
+      
+      Return only a JSON object with: products (array of product objects with name, category, mentioned_by), services (array of service objects with name, category, mentioned_by)
+
+  call_reason:
+    prompt: |
+      Extract call reason from this transcript: {transcript}
+      
+      Return only a JSON object with: primary_reason, secondary_reasons (array), urgency_level (low|medium|high|critical), call_type (inquiry|complaint|support|sales|other)
+
+  resolution_info:
+    prompt: |
+      Extract resolution info from this transcript: {transcript}
+      
+      Return only a JSON object with: resolution_status (resolved|escalated|pending|unresolved), resolution_method, follow_up_required (true|false), follow_up_date, escalation_reason
+
+# Classification Prompts
+# These prompts classify calls into predefined categories
+classification:
+  call_category:
+    prompt: |
+      Classify this call into one of the following categories based on the transcript:
+      
+      Categories:
+      - customer_support: General customer support and assistance
+      - technical_support: Technical issues and troubleshooting
+      - billing_inquiry: Questions about billing, payments, or charges
+      - account_management: Account changes, updates, or management
+      - sales_inquiry: Product inquiries, pricing, or sales discussions
+      - complaint: Customer complaints or dissatisfaction
+      - feedback: General feedback or suggestions
+      - appointment: Scheduling or appointment related
+      - unclassified: Does not fit into any of the above categories
+      
+      Return only the category name, no additional text.
+      
+      Transcript: {transcript}
+
+  sentiment_analysis:
+    prompt: |
+      Analyze the overall sentiment of this call. Classify it into one of the following categories:
+      
+      Categories:
+      - positive: Customer is satisfied, happy, or positive
+      - neutral: Customer is neither particularly positive nor negative
+      - negative: Customer is dissatisfied, frustrated, or negative
+      - mixed: Customer shows both positive and negative emotions
+      
+      Return only the category name, no additional text.
+      
+      Transcript: {transcript}
+
+  complexity_level:
+    prompt: |
+      Assess the complexity level of this call based on the issues discussed and resolution required.
+      
+      Categories:
+      - simple: Straightforward issue, quick resolution
+      - moderate: Some complexity, requires some investigation
+      - complex: Multiple issues, requires significant investigation
+      - very_complex: Multiple complex issues, may require escalation
+      
+      Return only the category name, no additional text.
+      
+      Transcript: {transcript}
+
+# Labeling Prompts
+# These prompts determine if specific labels should be applied to the call
+labeling:
+  - label: "urgent"
+    prompt: |
+      Determine if this call should be labeled as "urgent". 
+      A call is urgent if it involves:
+      - Critical issues affecting service
+      - Security concerns
+      - Financial emergencies
+      - Health or safety issues
+      - Time-sensitive matters requiring immediate attention
+      
+      Return only "yes" or "no".
+      
+      Transcript: {transcript}
+
+  - label: "escalation_required"
+    prompt: |
+      Determine if this call requires escalation to a supervisor or specialist.
+      Escalation is needed if:
+      - Agent cannot resolve the issue
+      - Customer requests supervisor
+      - Complex technical issues
+      - Billing disputes
+      - Policy exceptions needed
+      
+      Return only "yes" or "no".
+      
+      Transcript: {transcript}
+
+  - label: "follow_up_needed"
+    prompt: |
+      Determine if this call requires follow-up action.
+      Follow-up is needed if:
+      - Issue cannot be resolved immediately
+      - Additional information is required
+      - Customer expects callback
+      - Action items were assigned
+      
+      Return only "yes" or "no".
+      
+      Transcript: {transcript}
+
+  - label: "satisfaction_survey"
+    prompt: |
+      Determine if this call should trigger a satisfaction survey.
+      Survey should be sent if:
+      - Call was resolved successfully
+      - Customer interaction was positive
+      - Support issue was handled
+      - Not a simple inquiry
+      
+      Return only "yes" or "no".
+      
+      Transcript: {transcript}
+
+  - label: "training_opportunity"
+    prompt: |
+      Determine if this call represents a training opportunity for agents.
+      Training opportunity exists if:
+      - Agent struggled with the issue
+      - Process improvements could be made
+      - New or complex scenario encountered
+      - Customer service skills need improvement
+      
+      Return only "yes" or "no".
+      
+      Transcript: {transcript}
+
+  - label: "upsell_opportunity"
+    prompt: |
+      Determine if this call presents an upsell opportunity.
+      Upsell opportunity exists if:
+      - Customer shows interest in additional services
+      - Current service limitations are discussed
+      - Customer has growth needs
+      - Cross-selling is appropriate
+      
+      Return only "yes" or "no".
+      
+      Transcript: {transcript}
+
+# Default agent prompt for backward compatibility
+default_agent_prompt: "Analyze the following call transcript and provide insights about the conversation."

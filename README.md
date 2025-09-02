@@ -12,6 +12,7 @@ A comprehensive platform for analyzing, storing, and visualizing voice call data
 - **🌐 Modern Web UI**: Beautiful React/Next.js frontend with real-time timeline visualization
 - **🔌 Flexible Data Ingestion**: Support for both direct API calls and Bolna platform integration
 - **📊 Rich Analytics**: Call health metrics, pause analysis, and termination issue detection
+- **🔍 Data Extraction Pipeline**: AI-powered extraction, classification, and labeling of call data
 - **🚀 FastAPI Backend**: High-performance async API with automatic documentation
 - **🗄️ PostgreSQL Database**: Robust data storage with Alembic migrations
 - **⚡ Asynchronous Processing**: Real-time API responses with background audio processing
@@ -28,10 +29,16 @@ A comprehensive platform for analyzing, storing, and visualizing voice call data
 ![Transcript](docs/images/transcript.png)
 
 ### Transcript Analysis
-![Transcript](docs/images/transcript_analysis.png)
+![Transcript Analysis](docs/images/transcript_analysis.png)
 
 ### Audio Analysis
-![Transcript](docs/images/audio_analysis.png)
+![Audio Analysis](docs/images/audio_analysis.png)
+
+### Extracted Data
+![Extracted data](docs/images/extraction.png)
+
+### Labelling & Classification
+![Labelling & Classification](docs/images/labels_n_classification.png)
 
 ## 🚀 Quick Start
 
@@ -165,12 +172,14 @@ OPENAI_API_KEY=your_openai_api_key
 - ✅ **Transcript Analysis**: AI-powered call outcome analysis, quality assessment, and improvement areas
 - ✅ **Agent Performance Evaluation**: Goal achievement analysis and script adherence evaluation
 - ✅ **Executive Summaries**: Intelligent call summaries with key insights
+- ✅ **Data Extraction Pipeline**: Automatic extraction, classification, and labeling of call data
 
 **What happens without OpenAI API key:**
 - ✅ **Audio Analysis**: Pause detection, speech segmentation, conversation health scoring
 - ✅ **Basic Processing**: Audio file processing and S3 storage
 - ❌ **No Transcript Analysis**: Call outcome, quality metrics, and improvement areas won't be generated
 - ❌ **No Agent Evaluation**: Performance analysis and script adherence won't be available
+- ❌ **No Data Extraction**: Structured data extraction, classification, and labeling won't be available
 
 ### Method 1: Direct API Calls (Recommended for Custom Integrations)
 
@@ -222,6 +231,137 @@ python app/integrations/fetch_bolna_calls_simple.py
 - ✅ Transcript normalization and timestamp alignment
 - ✅ Seamless S3 upload and storage
 
+## 🔍 Data Extraction Pipeline
+
+Voice Summary includes a powerful AI-driven data extraction pipeline that automatically processes call transcripts to extract structured information, classify calls, and apply relevant labels.
+
+### 🎯 Pipeline Features
+
+#### **Data Extraction**
+- **Customer Information**: Name, email, phone, account number, customer ID
+- **Product Mentions**: Products and services discussed during the call
+- **Call Reasons**: Primary and secondary reasons for the call
+- **Resolution Info**: How the call was resolved and follow-up requirements
+
+#### **Call Classification**
+- **Call Category**: customer_support, technical_support, billing_inquiry, sales_inquiry, etc.
+- **Sentiment Analysis**: positive, neutral, negative, mixed
+- **Complexity Level**: simple, moderate, complex, very_complex
+
+#### **Smart Labeling**
+- **Urgency**: urgent, escalation_required, follow_up_needed
+- **Business Actions**: satisfaction_survey, training_opportunity, upsell_opportunity
+
+### ⚙️ Configuration
+
+The pipeline is configured through `config/agent_prompts.yaml`. You can easily add new extraction, classification, or labeling prompts:
+
+```yaml
+# Add new extraction prompt
+extraction:
+  call_duration:
+    prompt: |
+      Extract call duration and timing information from this transcript: {transcript}
+      
+      Return only a JSON object with: total_duration_seconds, agent_speaking_time, customer_speaking_time
+
+# Add new classification prompt
+classification:
+  language_detected:
+    prompt: |
+      Detect the primary language used in this call.
+      
+      Categories: english, spanish, french, other
+      
+      Return only the category name.
+      
+      Transcript: {transcript}
+
+# Add new labeling prompt
+labeling:
+  - label: "high_value_customer"
+    prompt: |
+      Determine if this call involves a high-value customer.
+      High-value indicators: premium account, large transactions, VIP status
+      
+      Return only "yes" or "no".
+      
+      Transcript: {transcript}
+```
+
+### 🚀 Usage
+
+#### **Automatic Processing**
+The pipeline runs automatically when calls are created via the API.
+
+#### **Manual Processing**
+```bash
+# Process a specific call
+curl -X POST "http://localhost:8000/api/calls/{call_id}/process-data-pipeline" \
+  -H "Content-Type: application/json" \
+  -d '{"call_id": "call_123", "force_reprocess": false}'
+
+# Get extracted data
+curl "http://localhost:8000/api/calls/{call_id}/extracted-data"
+
+# Check processing status
+curl "http://localhost:8000/api/calls/{call_id}/extracted-data/status"
+```
+
+#### **Frontend Interface**
+- Navigate to any call detail page
+- Click on the "Extracted Data" tab
+- View processing status, extracted information, classifications, and labels
+- Reprocess data if needed
+
+#### **Batch Processing**
+```bash
+# Process all existing calls in the database
+python test_all_calls_pipeline.py
+
+# Force reprocess all calls (including already processed ones)
+python test_all_calls_pipeline.py --force
+
+# Show help
+python test_all_calls_pipeline.py --help
+```
+
+### 📊 Example Results
+
+```json
+{
+  "extraction_data": {
+    "customer_info": {
+      "customer_name": "John Smith",
+      "account_number": "123456789",
+      "customer_email": null
+    },
+    "call_reason": {
+      "primary_reason": "billing inquiry",
+      "urgency_level": "medium",
+      "call_type": "inquiry"
+    }
+  },
+  "classification_data": {
+    "call_category": "billing_inquiry",
+    "sentiment_analysis": "positive",
+    "complexity_level": "simple"
+  },
+  "labeling_data": {
+    "urgent": false,
+    "satisfaction_survey": true,
+    "follow_up_needed": false
+  }
+}
+```
+
+### 🔧 Customization
+
+- **Add New Prompts**: Simply add new sections to `config/agent_prompts.yaml`
+- **No Code Changes**: New prompts are automatically picked up by the pipeline
+- **Error Handling**: Missing prompts are gracefully skipped
+- **Parallel Processing**: All prompts run simultaneously for maximum efficiency
+
 ## 🏗️ Project Structure
 
 ```
@@ -234,6 +374,7 @@ voicesummary/
 │   ├── utils/                    # Utility modules
 │   │   ├── audio_processor.py    # Audio analysis & processing
 │   │   ├── improved_voice_analyzer.py  # AI voice analysis
+│   │   ├── call_data_pipeline.py # Data extraction pipeline
 │   │   └── s3.py                # S3 operations
 │   ├── models.py                 # Database models
 │   ├── schemas.py                # API schemas
@@ -243,8 +384,11 @@ voicesummary/
 │   ├── components/               # React components
 │   │   ├── AudioPlayer.tsx       # Audio playback
 │   │   ├── EnhancedTimeline.tsx  # Timeline visualization
+│   │   ├── ExtractedData.tsx    # Data extraction display
 │   │   └── TranscriptViewer.tsx  # Transcript display
 │   └── types/                    # TypeScript type definitions
+├── config/                       # Configuration files
+│   └── agent_prompts.yaml       # Data extraction pipeline prompts
 ├── alembic/                      # Database migrations
 ├── setup.sh                      # Complete setup script
 ├── start_backend.sh              # Backend start script
@@ -272,6 +416,14 @@ voicesummary/
 |--------|----------|-------------|
 | `POST` | `/api/calls/{call_id}/process-audio` | Process audio file |
 
+### Data Extraction Pipeline
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/calls/{call_id}/process-data-pipeline` | Process call through data extraction pipeline |
+| `GET` | `/api/calls/{call_id}/extracted-data` | Get extracted data for a call |
+| `GET` | `/api/calls/{call_id}/extracted-data/status` | Get processing status of extracted data |
+
 ## 🎯 Use Cases
 
 ### Voice Agent Analytics
@@ -288,6 +440,9 @@ voicesummary/
 - **Call Analytics**: Generate reports on call volumes, durations, and outcomes
 - **Customer Experience**: Analyze conversation sentiment and satisfaction metrics
 - **Operational Insights**: Identify bottlenecks and optimization opportunities
+- **Data Extraction**: Automatically extract structured data from call transcripts
+- **Call Classification**: Categorize calls by type, sentiment, and complexity
+- **Smart Labeling**: Apply business-relevant labels for follow-up actions
 
 ## 🛠️ Development
 

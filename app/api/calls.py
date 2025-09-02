@@ -16,6 +16,8 @@ from app.schemas import AudioCallCreate, AudioCallCreateWithProcessing, AudioCal
 from app.utils.s3 import s3_manager
 from app.utils.audio_processor import process_audio_and_store
 from app.config import settings
+from app.models import CallExtractedData
+from app.schemas import CallDataPipelineRequest, CallDataPipelineResponse, ExtractedDataResponse
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +97,21 @@ async def create_call(
         except Exception as e:
             logger.warning(f"Could not perform agent analysis for call {call_data.call_id}: {e}")
             # Continue without agent analysis
+    
+    # Start data extraction pipeline in background
+    try:
+        from app.utils.call_data_pipeline import pipeline
+        asyncio.create_task(
+            pipeline.process_call_transcript(
+                call_id=call_data.call_id,
+                transcript=call_data.transcript,
+                db=db
+            )
+        )
+        logger.info(f"Started data extraction pipeline for call {call_data.call_id}")
+    except Exception as e:
+        logger.warning(f"Could not start data extraction pipeline for call {call_data.call_id}: {e}")
+        # Continue without data extraction
     
     try:
         db.add(db_call)
@@ -942,3 +959,153 @@ async def analyze_agent_performance(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to analyze agent performance: {str(e)}"
         )
+
+
+@router.post("/{call_id}/process-data-pipeline", response_model=CallDataPipelineResponse, status_code=status.HTTP_200_OK)
+async def process_call_data_pipeline(
+    call_id: str,
+    pipeline_request: CallDataPipelineRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Process a call through the data extraction, classification, and labeling pipeline.
+    
+    Args:
+        call_id: Unique identifier for the call
+        pipeline_request: Pipeline processing request
+        db: Database session
+        
+    Returns:
+        Pipeline processing results
+    """
+    # Get the call record
+    call = db.query(AudioCall).filter(AudioCall.call_id == call_id).first()
+    if not call:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Call with ID {call_id} not found"
+        )
+    
+    # Check if transcript exists
+    if not call.transcript:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No transcript available for processing"
+        )
+    
+    # Check if extracted data already exists
+    existing_data = db.query(CallExtractedData).filter(
+        CallExtractedData.call_id == call_id
+    ).first()
+    
+    if existing_data and existing_data.processing_status == "completed" and not pipeline_request.force_reprocess:
+        return CallDataPipelineResponse(
+            call_id=call_id,
+            status="already_processed",
+            message="Call data has already been processed. Use force_reprocess=true to reprocess.",
+            extracted_data=ExtractedDataResponse.from_orm(existing_data)
+        )
+    
+    try:
+        # Import the pipeline
+        from app.utils.call_data_pipeline import pipeline
+        
+        # Process the call transcript
+        results = await pipeline.process_call_transcript(
+            call_id=call_id,
+            transcript=call.transcript,
+            db=db
+        )
+        
+        # Get the updated extracted data record
+        updated_data = db.query(CallExtractedData).filter(
+            CallExtractedData.call_id == call_id
+        ).first()
+        
+        if updated_data and updated_data.processing_status == "completed":
+            return CallDataPipelineResponse(
+                call_id=call_id,
+                status="success",
+                message="Call data processed successfully",
+                extracted_data=ExtractedDataResponse.from_orm(updated_data)
+            )
+        else:
+            return CallDataPipelineResponse(
+                call_id=call_id,
+                status="error",
+                message="Processing failed or is still in progress",
+                errors=results.get("processing_errors", {})
+            )
+        
+    except Exception as e:
+        logger.error(f"Error processing call data pipeline for call {call_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process call data pipeline: {str(e)}"
+        )
+
+
+@router.get("/{call_id}/extracted-data", response_model=ExtractedDataResponse, status_code=status.HTTP_200_OK)
+async def get_call_extracted_data(
+    call_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get extracted data for a specific call.
+    
+    Args:
+        call_id: Unique identifier for the call
+        db: Database session
+        
+    Returns:
+        Extracted data for the call
+    """
+    # Get the extracted data record
+    extracted_data = db.query(CallExtractedData).filter(
+        CallExtractedData.call_id == call_id
+    ).first()
+    
+    if not extracted_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No extracted data found for call {call_id}"
+        )
+    
+    return ExtractedDataResponse.from_orm(extracted_data)
+
+
+@router.get("/{call_id}/extracted-data/status", status_code=status.HTTP_200_OK)
+async def get_call_extracted_data_status(
+    call_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get the processing status of extracted data for a specific call.
+    
+    Args:
+        call_id: Unique identifier for the call
+        db: Database session
+        
+    Returns:
+        Processing status information
+    """
+    # Get the extracted data record
+    extracted_data = db.query(CallExtractedData).filter(
+        CallExtractedData.call_id == call_id
+    ).first()
+    
+    if not extracted_data:
+        return {
+            "call_id": call_id,
+            "status": "not_processed",
+            "message": "No extracted data record found"
+        }
+    
+    return {
+        "call_id": call_id,
+        "status": extracted_data.processing_status,
+        "message": f"Processing status: {extracted_data.processing_status}",
+        "has_errors": bool(extracted_data.processing_errors),
+        "created_at": extracted_data.created_at.isoformat() if extracted_data.created_at else None,
+        "updated_at": extracted_data.updated_at.isoformat() if extracted_data.updated_at else None
+    }

@@ -1,9 +1,30 @@
 [project]
 name = "voicesummary"
 version = "0.1.0"
-description = "Audio call management system with FastAPI, PostgreSQL, and S3"
+description = "Open Source AI Database for Voice Agent Transcripts - Advanced analytics platform for storing, analyzing, and extracting insights from voice call data using AI"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "Dipesh Mittal", email = "dipesh@drdroid.io"}
+]
+keywords = ["voice-analytics", "ai-database", "transcript-analysis", "voice-agents", "call-analytics", "ai-extraction", "voice-processing", "conversation-ai", "speech-analytics", "customer-service-ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Framework :: FastAPI",
+    "Framework :: React",
+    "Framework :: Next.js",
 ]
 dependencies = [
     "fastapi>=0.104.0",
@@ -21,8 +42,17 @@ dependencies = [
     "scipy>=1.13.1",
     "webrtcvad>=2.0.10",
     "setuptools>=80.9.0",
+    "openai>=1.0.0",
 ]
 requires-python = ">=3.9"
+
+[project.urls]
+Homepage = "https://github.com/DrDroidLab/voicesummary"
+Documentation = "https://github.com/DrDroidLab/voicesummary#readme"
+Repository = "https://github.com/DrDroidLab/voicesummary"
+Issues = "https://github.com/DrDroidLab/voicesummary/issues"
+Discussions = "https://github.com/DrDroidLab/voicesummary/discussions"
+"Bug Tracker" = "https://github.com/DrDroidLab/voicesummary/issues"
 
 [build-system]
 requires = ["hatchling"]

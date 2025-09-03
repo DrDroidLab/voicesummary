@@ -4,6 +4,46 @@
 
 A comprehensive AI-powered database and analytics platform for storing, analyzing, and extracting insights from voice agent call transcripts. Built with FastAPI, React/Next.js, and PostgreSQL, featuring advanced AI analysis, transcript enhancement, and intelligent data extraction.
 
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18+-blue.svg)](https://reactjs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-14+-black.svg)](https://nextjs.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12+-blue.svg)](https://postgresql.org)
+[![OpenAI](https://img.shields.io/badge/OpenAI-API-orange.svg)](https://openai.com)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/DrDroidLab/voicesummary)](https://github.com/DrDroidLab/voicesummary/stargazers)
+[![Forks](https://img.shields.io/github/forks/DrDroidLab/voicesummary)](https://github.com/DrDroidLab/voicesummary/network)
+[![Issues](https://img.shields.io/github/issues/DrDroidLab/voicesummary)](https://github.com/DrDroidLab/voicesummary/issues)
+
+## 🎯 What is Voice Summary?
+
+Voice Summary is an **open-source AI database** specifically designed for **voice agent transcripts** and **call analytics**. It provides:
+
+- 🤖 **AI-Powered Transcript Analysis** - Advanced machine learning for call outcome analysis
+- 📊 **Intelligent Data Extraction** - Automatic extraction of customer information and business insights
+- 🏷️ **Smart Classification & Labeling** - AI-driven call categorization and sentiment analysis
+- 🎵 **Advanced Audio Processing** - Voice analysis with pause detection and conversation health scoring
+- ☁️ **Cloud-Ready Architecture** - Built with FastAPI, React, PostgreSQL, and AWS S3 integration
+
+Perfect for **call centers**, **voice bot developers**, **customer service teams**, and **AI researchers** who need comprehensive voice analytics and transcript management.
+
+## 📋 Table of Contents
+
+- [✨ Features](#-features)
+- [🖼️ What you will get](#️-what-you-will-get)
+- [🚀 Quick Start](#-quick-start)
+- [📥 Data Ingestion](#-data-ingestion)
+- [🔍 AI-Powered Data Extraction Pipeline](#-ai-powered-data-extraction-pipeline)
+- [🔌 API Endpoints](#-api-endpoints)
+- [🎯 Use Cases](#-use-cases)
+- [🏗️ Project Structure](#️-project-structure)
+- [🛠️ Development](#️-development)
+- [🚀 Deployment](#-deployment)
+- [🤝 Contributing](#-contributing)
+- [📚 Documentation](#-documentation)
+- [🐛 Troubleshooting](#-troubleshooting)
+- [📄 License](#-license)
+
 ## ✨ Features
 
 - **🤖 AI-Powered Transcript Analysis**: Advanced AI models for call outcome analysis, quality assessment, and performance evaluation
@@ -18,7 +58,8 @@ A comprehensive AI-powered database and analytics platform for storing, analyzin
 - **🗄️ PostgreSQL Database**: Robust data storage with Alembic migrations
 - **⚡ Asynchronous Processing**: Real-time API responses with background AI processing
 
-## 🖼️ What you will get
+## 🖼️ What you will get 
+### Samples for an appointment booking bot
 
 ### Calls List
 ![Main Dashboard](docs/images/main.png)
@@ -638,6 +679,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🌟 Star History
 
 If you find this project useful, please give it a ⭐️ on GitHub!
+
+---
+
+## 🔍 Key Technologies & Keywords
+
+**Voice Analytics**: AI-powered call analysis, transcript processing, voice agent analytics  
+**Call Center Solutions**: Customer service analytics, call quality assessment, performance monitoring  
+**AI Database**: Machine learning, natural language processing, intelligent data extraction  
+**Voice Bot Analytics**: Conversation intelligence, speech analytics, chatbot performance  
+**Open Source**: Free, community-driven, extensible voice analytics platform  
+**FastAPI**: High-performance Python web framework for voice data APIs  
+**React/Next.js**: Modern frontend for voice analytics dashboard  
+**PostgreSQL**: Robust database for voice transcript storage and analysis  
+**OpenAI Integration**: Advanced AI models for transcript analysis and insights
 
 ---
 

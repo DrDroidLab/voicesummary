@@ -96,7 +96,7 @@ Perfect for **call centers**, **voice bot developers**, **customer service teams
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/voicesummary.git
+git clone https://github.com/DrDroidLab/voicesummary.git
 cd voicesummary
 
 # Run the complete setup script
@@ -117,7 +117,7 @@ If you prefer manual setup:
 
 ```bash
 # 1. Clone and navigate
-git clone https://github.com/yourusername/voicesummary.git
+git clone https://github.com/DrDroidLab/voicesummary.git
 cd voicesummary
 
 # 2. Setup Python backend

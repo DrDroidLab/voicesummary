@@ -51,6 +51,7 @@ Perfect for **call centers**, **voice bot developers**, **customer service teams
 - **🏷️ Smart Classification & Labeling**: AI-driven call categorization, sentiment analysis, and business action labeling
 - **📝 Enhanced Transcript Processing**: Automatic timestamp alignment, turn-by-turn conversation analysis, and transcript normalization
 - **🎵 Advanced Audio Analysis**: AI-powered voice analysis with pause detection, speech segmentation, and conversation health scoring
+- **🔄 Multi-Agent Comparison**: Scenario-based testing to compare multiple voice agents with AI-powered metrics
 - **☁️ S3 Integration**: Secure audio file storage with automatic format detection
 - **🌐 Modern Web UI**: Beautiful React/Next.js frontend with real-time timeline visualization
 - **🔌 Flexible Data Ingestion**: Support for both direct API calls and Bolna platform integration
@@ -413,13 +414,18 @@ python test_all_calls_pipeline.py --help
 voicesummary/
 ├── app/                          # Backend application
 │   ├── api/                      # API endpoints
-│   │   └── calls.py             # Call management API
+│   │   ├── calls.py             # Call management API
+│   │   └── agent_comparison.py   # Agent comparison API
 │   ├── integrations/             # External platform integrations
-│   │   └── fetch_bolna_calls_simple.py  # Bolna integration
+│   │   ├── fetch_bolna_calls_simple.py  # Bolna integration
+│   │   ├── bolna_agent_config_fetcher.py  # Agent config fetching
+│   │   └── manual_agent_manager.py        # Manual agent management
 │   ├── utils/                    # Utility modules
 │   │   ├── audio_processor.py    # Audio analysis & processing
 │   │   ├── improved_voice_analyzer.py  # AI voice analysis
 │   │   ├── call_data_pipeline.py # AI data extraction pipeline
+│   │   ├── comparison_orchestrator.py     # Comparison execution
+│   │   ├── conversation_simulator.py      # AI dialogue simulation
 │   │   └── s3.py                # S3 operations
 │   ├── models.py                 # Database models
 │   ├── schemas.py                # API schemas
@@ -468,6 +474,16 @@ voicesummary/
 | `POST` | `/api/calls/{call_id}/process-data-pipeline` | Process call through AI data extraction pipeline |
 | `GET` | `/api/calls/{call_id}/extracted-data` | Get AI-extracted data for a call |
 | `GET` | `/api/calls/{call_id}/extracted-data/status` | Get AI processing status of extracted data |
+
+### Agent Comparison
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/comparisons/` | Create new agent comparison |
+| `GET` | `/api/comparisons/` | List all comparisons |
+| `GET` | `/api/comparisons/{comparison_id}` | Get comparison details |
+| `POST` | `/api/comparisons/{comparison_id}/execute` | Execute comparison |
+| `POST` | `/api/comparisons/{comparison_id}/rerun` | Re-run comparison |
 
 ## 🎯 Use Cases
 

@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import Link from 'next/link'
+import { Zap } from 'lucide-react'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -25,6 +27,15 @@ export default function RootLayout({
                   <h1 className="text-2xl font-bold text-gray-900">
                     🎯 Voice Summary
                   </h1>
+                </div>
+                <div>
+                  <Link
+                    href="/agent-comparison"
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 hover:text-primary-700 border border-primary-300 hover:border-primary-400 rounded-lg transition-colors"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Agent Comparison
+                  </Link>
                 </div>
               </div>
             </div>
